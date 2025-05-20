@@ -5,6 +5,13 @@ load_dotenv(override=True)
 from pydantic import BaseModel
 from crewai.flow import Flow, start
 from crewai import LLM
+from pprint import pprint
+import logging
+import json
+
+logger = logging.getLogger(__name__)
+
+logging.basicConfig(level=logging.INFO)
 
 class SharedState(BaseModel):
     messages: list[dict[str, str]] = []
@@ -23,6 +30,8 @@ class SharedStateFlow(Flow[SharedState]):
             }
         ]
 
+        logger.info(f"####STATE####\n{json.dumps(self.state.model_dump(), indent=2)}")
+
         if self.state.messages:
             messages.append(self.state.messages[-1])
         
@@ -34,6 +43,8 @@ class SharedStateFlow(Flow[SharedState]):
         })
         return response
 
+    def __repr__(self):
+        pprint(vars(self), width=120, depth=3)
 
 def kickoff():
     shared_state_flow = SharedStateFlow()
