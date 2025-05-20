@@ -30,15 +30,19 @@ class SharedStateFlow(Flow[SharedState]):
             }
         ]
 
+        logger.info(f"Initial input state: {self.state}")
+        logger.info(f"Raw state dump: {json.dumps(self.state.model_dump(), indent=2)}")
+        logger.info(f"Messages in state: {self.state.messages}")
+
         logger.info(f"####STATE####\n{json.dumps(self.state.model_dump(), indent=2)}")
 
         if self.state.messages:
             messages.append(self.state.messages[-1])
-        
+
         response = llm.call(messages)
 
         self.state.messages.append({
-            "role": "assistant", 
+            "role": "assistant",
             "content": response
         })
         return response
