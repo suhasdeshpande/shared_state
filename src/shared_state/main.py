@@ -20,6 +20,12 @@ llm = LLM(
     model="gpt-4o"
 )
 class SharedStateFlow(Flow[SharedState]):
+    def __init__(self, *args, **kwargs):
+        logger.info(f"Initialization args: {args}")
+        logger.info(f"Initialization kwargs: {kwargs}")
+        super().__init__(*args, **kwargs)
+        logger.info(f"Initial Flow State: {self.state}")
+        logger.info(f"Initial Flow State (model_dump): {self.state.model_dump()}")
 
     @start()
     def chat(self):
