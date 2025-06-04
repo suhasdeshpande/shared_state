@@ -519,7 +519,7 @@ wheels = [
 
 [[package]]
 name = "copilotkit"
-version = "0.1.46"
+version = "0.1.47"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastapi" },
@@ -528,9 +528,9 @@ dependencies = [
     { name = "partialjson" },
     { name = "toml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/79/3e/f23a123699d6aefeffa56186a72d6d87523d57bb057b6be2895d29fa6804/copilotkit-0.1.46.tar.gz", hash = "sha256:fa9e913b63af60c07d599722801121831903b6ce858dc57db7f1b5ad361c6d22", size = 28443 }
+sdist = { url = "https://files.pythonhosted.org/packages/57/6a/bd69fe4be0ad696f2cb4b27fe649176e0b92b1fe3cc52ec7f00a7a9d2a45/copilotkit-0.1.47.tar.gz", hash = "sha256:56ae8e27920d8b741d3e08a7dfabf148c6ab3b19dab6d926616ca7d4165fbad1", size = 28438 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/14/ae/506441e430c29c7c1c506c8a455baef319bd3b57affb012aa3445cbb271c/copilotkit-0.1.46-py3-none-any.whl", hash = "sha256:f229dd513d3fcbbcb5634e4e5e1563bfebd7f6cb97525c3345d1f203deedf5fa", size = 36185 },
+    { url = "https://files.pythonhosted.org/packages/4e/45/7a39121459cdd01f61d9b99ad77cb0583b1f7caf2589e7e8e409f9bd277f/copilotkit-0.1.47-py3-none-any.whl", hash = "sha256:940cf6918efda6b19b905814ec1093f02c7aff66be6762b100fb030c39792dc7", size = 36181 },
 ]
 
 [package.optional-dependencies]
@@ -776,7 +776,7 @@ name = "exceptiongroup"
 version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.12.4'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0b/9f/a65090624ecf468cdca03533906e7c69ed7588582240cfe7cc9e770b50eb/exceptiongroup-1.3.0.tar.gz", hash = "sha256:b241f5885f560bc56a59ee63ca4c6a8bfa46ae4ad651af316d4e81817bb9fd88", size = 29749 }
 wheels = [
@@ -3223,8 +3223,8 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "copilotkit", specifier = ">=0.1.46,<1.0.0" },
-    { name = "copilotkit", extras = ["crewai"], specifier = ">=0.1.46,<1.0.0" },
+    { name = "copilotkit", specifier = ">=0.1.47a2" },
+    { name = "copilotkit", extras = ["crewai"], specifier = ">=0.1.47a2" },
     { name = "crewai", extras = ["tools"], specifier = ">=0.118.0,<1.0.0" },
 ]
 
