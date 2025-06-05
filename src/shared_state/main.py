@@ -18,8 +18,6 @@ from copilotkit.crewai import (
 )
 from crewai.flow import persist
 
-logger = logging.getLogger(__name__)
-
 class SkillLevel(str, Enum):
     """
     The level of skill required for the recipe.
@@ -161,8 +159,6 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         This is the current state of the recipe: ----\n {json.dumps(self.state.recipe, indent=2) if self.state.recipe else "No recipe created yet"}\n-----
         """
 
-        logger.info(f"System prompt: {system_prompt}")
-
         # Initialize CrewAI LLM with streaming enabled
         llm = LLM(model="gpt-4o", stream=True)
 
@@ -172,15 +168,12 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         try:
             # Track tool calls
             initial_tool_calls_count = len(tool_calls_log)
-            logger.info(f"Initial tool calls count: {initial_tool_calls_count}")
 
             response_content = llm.call(
                 messages=messages,
                 tools=[GENERATE_RECIPE_TOOL],
                 available_functions={"generate_recipe": self.generate_recipe_handler}
             )
-
-            logger.info(f"Response content: {response_content}")
 
             # Handle tool responses using the base class method
             final_response = self.handle_tool_responses(
@@ -208,12 +201,10 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
             })
 
         except Exception as e:
-            logger.error(f"An error occurred: {str(e)}")
             return f"\n\nAn error occurred: {str(e)}\n\n"
 
     def generate_recipe_handler(self, recipe):
         """Handler for the generate_recipe tool"""
-        logger.info(f"#### Handling generate_recipe tool call ####: {recipe}")
         # Convert the recipe dict to a Recipe object for validation
         recipe_obj = Recipe(**recipe)
         # Store as dict for JSON serialization, but validate first

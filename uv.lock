@@ -519,7 +519,7 @@ wheels = [
 
 [[package]]
 name = "copilotkit"
-version = "0.1.47a2"
+version = "0.1.47a3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastapi" },
@@ -528,14 +528,9 @@ dependencies = [
     { name = "partialjson" },
     { name = "toml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/65/c5/11b756fcebe1871644ce0ddc2a19869a6beb86c0392282bf3ac876b0cb14/copilotkit-0.1.47a2.tar.gz", hash = "sha256:8c78de3ef94097e5831ef1d6389d3621371c73e6efc2d67e98d603d40699040d", size = 32268, upload-time = "2025-05-29T20:13:14.707Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/06/88/4ac9dd241b9644c536d4a8976376454f287d6b89f68005934c004c1ede22/copilotkit-0.1.47a3.tar.gz", hash = "sha256:3298b53656411ecc9a5a98e9ce0775599d2dd980404645aa3c387800da86e223", size = 32273, upload-time = "2025-06-05T16:03:09.637Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5b/02/578e97b7805c3f1ca850c44642d4c8809f10a5aa5fbc3df896cdf8148517/copilotkit-0.1.47a2-py3-none-any.whl", hash = "sha256:3b169c785701ada65215a916ac96beb6c5db429b46f9beeb9bfab17c74d84929", size = 40674, upload-time = "2025-05-29T20:13:13.203Z" },
-]
-
-[package.optional-dependencies]
-crewai = [
-    { name = "crewai" },
+    { url = "https://files.pythonhosted.org/packages/5c/c7/a4a4e3b83c66ef88b5294f2f9f8773998a0541622126b662da0754dcb24b/copilotkit-0.1.47a3-py3-none-any.whl", hash = "sha256:d0bcfb5caae1e9d67cf7c9aff9092c3880f07ce441ef800dda9364feac93576b", size = 40675, upload-time = "2025-06-05T16:03:08.001Z" },
 ]
 
 [[package]]
@@ -3217,14 +3212,13 @@ name = "shared-state"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "copilotkit", extra = ["crewai"] },
+    { name = "copilotkit" },
     { name = "crewai", extra = ["tools"] },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "copilotkit", specifier = "==0.1.47a2" },
-    { name = "copilotkit", extras = ["crewai"], specifier = "==0.1.47a2" },
+    { name = "copilotkit", specifier = "==0.1.47a3" },
     { name = "crewai", extras = ["tools"], specifier = ">=0.118.0,<1.0.0" },
 ]
 
