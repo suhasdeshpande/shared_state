@@ -151,6 +151,9 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         """
         Standard chat node.
         """
+        print(f"DEBUG: Current recipe state: {self.state.recipe}")
+        print(f"DEBUG: Current messages: {self.state.messages}")
+
         system_prompt = f"""
         You are a helpful assistant for creating recipes.
         To generate or modify a recipe, you MUST use the generate_recipe tool.
@@ -195,6 +198,7 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
             self.state.conversation_history.append(assistant_message)
 
             print("Final response: ", final_response)
+            print(f"DEBUG: Updated recipe state: {self.state.recipe}")
 
             return json.dumps({
                 "response": final_response,
@@ -206,25 +210,30 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
 
     def generate_recipe_handler(self, recipe):
         """Handler for the generate_recipe tool"""
+        print(f"DEBUG: generate_recipe_handler called with: {recipe}")
+
         # Convert the recipe dict to a Recipe object for validation
         recipe_obj = Recipe(**recipe)
         # Store as dict for JSON serialization, but validate first
         self.state.recipe = recipe_obj.model_dump()
+
+        print(f"DEBUG: State updated with recipe: {self.state.recipe}")
+
         return recipe_obj.model_dump_json(indent=2)
 
 
 def kickoff():
     shared_state_flow = SharedStateFlow()
     result = shared_state_flow.kickoff({
-        "inputs": {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "Create a simple pasta recipe for beginners"
-                }
-            ],
-            "recipe": None  # Initialize recipe field
-        }
+        "state": {
+            "recipe": None
+        },
+        "messages": [
+            {
+                "role": "user",
+                "content": "Create a simple pasta recipe for beginners"
+            }
+        ]
     })
     print(result)
 
