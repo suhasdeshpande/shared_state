@@ -165,6 +165,7 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         # Get message history using the base class method
         messages = self.get_message_history(system_prompt=system_prompt)
 
+
         try:
             # Track tool calls
             initial_tool_calls_count = len(tool_calls_log)
@@ -211,8 +212,6 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         self.state.recipe = recipe_obj.model_dump()
         return recipe_obj.model_dump_json(indent=2)
 
-    def __repr__(self):
-        pprint(vars(self), width=120, depth=3)
 
 def kickoff():
     shared_state_flow = SharedStateFlow()
