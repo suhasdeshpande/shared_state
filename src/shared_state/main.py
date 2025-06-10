@@ -5,16 +5,15 @@ load_dotenv(override=True)
 import json
 import logging
 from enum import Enum
-from pprint import pprint
-from typing import Optional, List
+from typing import Optional, List, Any
 from crewai import LLM
 from crewai.flow import start
 from pydantic import BaseModel, Field
-# Import from copilotkit_integration
 from copilotkit.crewai import (
     CopilotKitFlow,
     tool_calls_log,
     FlowInputState,
+    emit_copilotkit_state_update_event
 )
 from crewai.flow import persist
 
@@ -141,7 +140,7 @@ class AgentState(FlowInputState):
     """
     The state of the recipe.
     """
-    recipe: Optional[Recipe] = None
+    data: dict[str, Any] = Field(default_factory=lambda: {"recipe": None}, description="Data containing recipe")
 
 
 @persist()
@@ -151,7 +150,7 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         """
         Standard chat node.
         """
-        print(f"DEBUG: Current recipe state: {self.state.recipe}")
+        print(f"DEBUG: Current recipe state: {self.state.data['recipe']}")
         print(f"DEBUG: Current messages: {self.state.messages}")
 
         system_prompt = f"""
@@ -159,7 +158,7 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         To generate or modify a recipe, you MUST use the generate_recipe tool.
         When you generated or modified the recipe, DO NOT repeat it as a message.
         Just briefly summarize the changes you made. 2 sentences max.
-        This is the current state of the recipe: ----\n {json.dumps(self.state.recipe, indent=2) if self.state.recipe else "No recipe created yet"}\n-----
+        This is the current state of the recipe: ----\n {json.dumps(self.state.data['recipe'], indent=2) if self.state.data['recipe'] else "No recipe created yet"}\n-----
         """
 
         # Initialize CrewAI LLM with streaming enabled
@@ -197,9 +196,6 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
             assistant_message = {"role": "assistant", "content": final_response}
             self.state.conversation_history.append(assistant_message)
 
-            print("Final response: ", final_response)
-            print(f"DEBUG: Updated recipe state: {self.state.recipe}")
-
             return json.dumps({
                 "response": final_response,
                 "id": self.state.id
@@ -210,23 +206,22 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
 
     def generate_recipe_handler(self, recipe):
         """Handler for the generate_recipe tool"""
-        print(f"DEBUG: generate_recipe_handler called with: {recipe}")
 
         # Convert the recipe dict to a Recipe object for validation
         recipe_obj = Recipe(**recipe)
         # Store as dict for JSON serialization, but validate first
-        self.state.recipe = recipe_obj.model_dump()
-
-        print(f"DEBUG: State updated with recipe: {self.state.recipe}")
-
-        return recipe_obj.model_dump_json(indent=2)
+        self.state.data["recipe"] = recipe_obj.model_dump()
+        emit_copilotkit_state_update_event(tool_name="generate_recipe", args=recipe_obj.model_dump())
+        return "Recipe created successfully"
 
 
 def kickoff():
     shared_state_flow = SharedStateFlow()
     result = shared_state_flow.kickoff({
         "state": {
-            "recipe": None
+            "data": {
+                "recipe": None
+            }
         },
         "messages": [
             {
