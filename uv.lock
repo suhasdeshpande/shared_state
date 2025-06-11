@@ -3296,12 +3296,14 @@ source = { editable = "." }
 dependencies = [
     { name = "copilotkit" },
     { name = "crewai", extra = ["tools"] },
+    { name = "litellm" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "copilotkit", specifier = "==0.1.49" },
     { name = "crewai", extras = ["tools"], specifier = ">=0.118.0,<1.0.0" },
+    { name = "litellm", specifier = ">=1.68.0" },
 ]
 
 [[package]]
