@@ -6,7 +6,7 @@ import json
 import logging
 from enum import Enum
 from typing import Optional, List, Any
-import litellm
+from crewai import LLM
 from crewai.flow import start
 from pydantic import BaseModel, Field
 from copilotkit.crewai import (
@@ -212,21 +212,14 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         Use the generate_recipe_basics tool to create this information.
         """
 
+        llm = LLM(model="gpt-4o")
         messages = self.get_message_history(system_prompt=system_prompt)
 
-        response = litellm.completion(
-            model="gpt-4o",
+        llm.call(
             messages=messages,
             tools=[GENERATE_RECIPE_BASICS_TOOL],
-            stream=False,
-            temperature=0.7
+            available_functions={"generate_recipe_basics": self.generate_recipe_basics_handler}
         )
-
-        # Process tool call
-        if hasattr(response, 'choices') and response.choices[0].message.tool_calls:
-            tool_call = response.choices[0].message.tool_calls[0]
-            function_args = json.loads(tool_call.function.arguments)
-            self.generate_recipe_basics_handler(function_args)
 
     def _generate_ingredients_step(self):
         """Step 2: Generate ingredients"""
@@ -243,21 +236,14 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         Generate appropriate ingredients for this recipe using the generate_ingredients tool.
         """
 
+        llm = LLM(model="gpt-4o")
         messages = [{"role": "system", "content": system_prompt}]
 
-        response = litellm.completion(
-            model="gpt-4o",
+        llm.call(
             messages=messages,
             tools=[GENERATE_INGREDIENTS_TOOL],
-            stream=False,
-            temperature=0.7
+            available_functions={"generate_ingredients": self.generate_ingredients_handler}
         )
-
-        # Process tool call
-        if hasattr(response, 'choices') and response.choices[0].message.tool_calls:
-            tool_call = response.choices[0].message.tool_calls[0]
-            function_args = json.loads(tool_call.function.arguments)
-            self.generate_ingredients_handler(function_args)
 
     def _generate_instructions_step(self):
         """Step 3: Generate cooking instructions"""
@@ -272,23 +258,16 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         Generate step-by-step cooking instructions using the generate_instructions tool.
         """
 
+        llm = LLM(model="gpt-4o")
         messages = [{"role": "system", "content": system_prompt}]
 
-        response = litellm.completion(
-            model="gpt-4o",
+        llm.call(
             messages=messages,
             tools=[GENERATE_INSTRUCTIONS_TOOL],
-            stream=False,
-            temperature=0.7
+            available_functions={"generate_instructions": self.generate_instructions_handler}
         )
 
-        # Process tool call
-        if hasattr(response, 'choices') and response.choices[0].message.tool_calls:
-            tool_call = response.choices[0].message.tool_calls[0]
-            function_args = json.loads(tool_call.function.arguments)
-            self.generate_instructions_handler(function_args)
-
-    def generate_recipe_basics_handler(self, data):
+    def generate_recipe_basics_handler(self, title: str, skill_level: str, dietary_preferences: List[str], cooking_time: str):
         """Handler for recipe basics generation"""
         print(f"DEBUG: *** GENERATING RECIPE BASICS ***")
 
@@ -298,10 +277,10 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
 
         current_recipe = self.state.data['recipe']
         current_recipe.update({
-            'title': data['title'],
-            'skill_level': data['skill_level'],
-            'dietary_preferences': data['dietary_preferences'],
-            'cooking_time': data['cooking_time']
+            'title': title,
+            'skill_level': skill_level,
+            'dietary_preferences': dietary_preferences,
+            'cooking_time': cooking_time
         })
 
         self.state.data['recipe'] = current_recipe
@@ -315,12 +294,12 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         print(f"DEBUG: *** EMITTED BASICS STATE UPDATE ***")
         return "Recipe basics created"
 
-    def generate_ingredients_handler(self, data):
+    def generate_ingredients_handler(self, ingredients: List[dict]):
         """Handler for ingredients generation"""
         print(f"DEBUG: *** GENERATING INGREDIENTS ***")
 
         current_recipe = self.state.data['recipe']
-        current_recipe['ingredients'] = data['ingredients']
+        current_recipe['ingredients'] = ingredients
         self.state.data['recipe'] = current_recipe
 
         # Emit state update
@@ -332,12 +311,12 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         print(f"DEBUG: *** EMITTED INGREDIENTS STATE UPDATE ***")
         return "Ingredients added"
 
-    def generate_instructions_handler(self, data):
+    def generate_instructions_handler(self, instructions: List[str]):
         """Handler for instructions generation"""
         print(f"DEBUG: *** GENERATING INSTRUCTIONS ***")
 
         current_recipe = self.state.data['recipe']
-        current_recipe['instructions'] = data['instructions']
+        current_recipe['instructions'] = instructions
         self.state.data['recipe'] = current_recipe
 
         # Validate final recipe
@@ -347,7 +326,7 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         # Emit final state update
         emit_copilotkit_state_update_event(
             tool_name="generate_instructions",
-            args=self.state.data['recipe']  # Use the validated final recipe
+            args=self.state.data['recipe']
         )
 
         print(f"DEBUG: *** EMITTED FINAL STATE UPDATE ***")
