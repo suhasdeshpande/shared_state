@@ -313,7 +313,7 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         # Emit state update
         emit_copilotkit_state_update_event(
             tool_name="generate_ingredients",
-            args=self.state.recipe
+            args=self.state
         )
 
         print(f"DEBUG: *** EMITTED INGREDIENTS STATE UPDATE ***")
@@ -330,7 +330,7 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         # Emit final state update
         emit_copilotkit_state_update_event(
             tool_name="generate_instructions",
-            args=self.state.recipe
+            args=self.state
         )
 
         print(f"DEBUG: *** EMITTED FINAL STATE UPDATE ***")
