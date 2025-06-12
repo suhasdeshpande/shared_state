@@ -11,11 +11,12 @@ from crewai.flow import start
 from pydantic import BaseModel, Field
 from copilotkit.crewai import (
     CopilotKitFlow,
-    tool_calls_log,
     FlowInputState,
     emit_copilotkit_state_update_event
 )
 from crewai.flow import persist
+
+llm = LLM(model="gpt-4o", stream=True)
 
 class SkillLevel(str, Enum):
     """
@@ -152,7 +153,18 @@ class AgentState(FlowInputState):
     """
     The state of the recipe.
     """
-    data: dict[str, Any] = Field(default_factory=lambda: {"recipe": None}, description="Data containing recipe")
+    recipe: Optional[dict] = None
+
+    def get_recipe(self) -> Optional[Recipe]:
+        """Get the recipe as a Recipe object"""
+        if self.recipe is None:
+            return None
+        return Recipe(**self.recipe)
+
+    def set_recipe(self, recipe: Recipe):
+        """Set the recipe from a Recipe object"""
+        self.recipe = recipe.model_dump()
+
 
 
 @persist()
@@ -162,12 +174,12 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         """
         Sequential recipe generation with streaming-like updates.
         """
-        print(f"DEBUG: Current recipe state: {self.state.data['recipe']}")
+        print(f"DEBUG: Current recipe state: {self.state.recipe}")
         print(f"DEBUG: Current messages: {self.state.messages}")
 
         # Initialize empty recipe if none exists
-        if not self.state.data['recipe']:
-            self.state.data['recipe'] = Recipe().model_dump()
+        if not self.state.recipe:
+            self.state.set_recipe(Recipe())
 
         # Get user request
         user_request = self.state.messages[-1].get('content', '') if self.state.messages else ''
@@ -212,7 +224,6 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         Use the generate_recipe_basics tool to create this information.
         """
 
-        llm = LLM(model="gpt-4o")
         messages = self.get_message_history(system_prompt=system_prompt)
 
         llm.call(
@@ -225,18 +236,17 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         """Step 2: Generate ingredients"""
         print("DEBUG: *** STEP 2: GENERATING INGREDIENTS ***")
 
-        current_recipe = self.state.data['recipe']
+        current_recipe = self.state.get_recipe()
         system_prompt = f"""
         You are adding ingredients to a recipe. Here's the current recipe basics:
-        Title: {current_recipe.get('title', 'Unknown')}
-        Skill Level: {current_recipe.get('skill_level', 'Unknown')}
-        Cooking Time: {current_recipe.get('cooking_time', 'Unknown')}
-        Dietary Preferences: {current_recipe.get('dietary_preferences', [])}
+        Title: {current_recipe.title or 'Unknown'}
+        Skill Level: {current_recipe.skill_level or 'Unknown'}
+        Cooking Time: {current_recipe.cooking_time or 'Unknown'}
+        Dietary Preferences: {current_recipe.dietary_preferences or []}
 
         Generate appropriate ingredients for this recipe using the generate_ingredients tool.
         """
 
-        llm = LLM(model="gpt-4o")
         messages = [{"role": "system", "content": system_prompt}]
 
         llm.call(
@@ -249,16 +259,15 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         """Step 3: Generate cooking instructions"""
         print("DEBUG: *** STEP 3: GENERATING INSTRUCTIONS ***")
 
-        current_recipe = self.state.data['recipe']
+        current_recipe = self.state.get_recipe()
         system_prompt = f"""
         You are completing a recipe by adding cooking instructions. Here's the current recipe:
-        Title: {current_recipe.get('title', 'Unknown')}
-        Ingredients: {len(current_recipe.get('ingredients', []))} ingredients
+        Title: {current_recipe.title or 'Unknown'}
+        Ingredients: {len(current_recipe.ingredients or [])} ingredients
 
         Generate step-by-step cooking instructions using the generate_instructions tool.
         """
 
-        llm = LLM(model="gpt-4o")
         messages = [{"role": "system", "content": system_prompt}]
 
         llm.call(
@@ -272,23 +281,22 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         print(f"DEBUG: *** GENERATING RECIPE BASICS ***")
 
         # Update recipe with basics
-        if not self.state.data['recipe']:
-            self.state.data['recipe'] = Recipe().model_dump()
+        if not self.state.recipe:
+            recipe = Recipe()
+        else:
+            recipe = self.state.get_recipe()
 
-        current_recipe = self.state.data['recipe']
-        current_recipe.update({
-            'title': title,
-            'skill_level': skill_level,
-            'dietary_preferences': dietary_preferences,
-            'cooking_time': cooking_time
-        })
+        recipe.title = title
+        recipe.skill_level = SkillLevel(skill_level)
+        recipe.dietary_preferences = dietary_preferences
+        recipe.cooking_time = CookingTime(cooking_time)
 
-        self.state.data['recipe'] = current_recipe
+        self.state.set_recipe(recipe)
 
         # Emit state update
         emit_copilotkit_state_update_event(
             tool_name="generate_recipe_basics",
-            args=current_recipe
+            args=self.state.recipe
         )
 
         print(f"DEBUG: *** EMITTED BASICS STATE UPDATE ***")
@@ -298,14 +306,14 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         """Handler for ingredients generation"""
         print(f"DEBUG: *** GENERATING INGREDIENTS ***")
 
-        current_recipe = self.state.data['recipe']
-        current_recipe['ingredients'] = ingredients
-        self.state.data['recipe'] = current_recipe
+        recipe = self.state.get_recipe()
+        recipe.ingredients = [Ingredient(**ing) for ing in ingredients]
+        self.state.set_recipe(recipe)
 
         # Emit state update
         emit_copilotkit_state_update_event(
             tool_name="generate_ingredients",
-            args=current_recipe
+            args=self.state.recipe
         )
 
         print(f"DEBUG: *** EMITTED INGREDIENTS STATE UPDATE ***")
@@ -315,18 +323,14 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         """Handler for instructions generation"""
         print(f"DEBUG: *** GENERATING INSTRUCTIONS ***")
 
-        current_recipe = self.state.data['recipe']
-        current_recipe['instructions'] = instructions
-        self.state.data['recipe'] = current_recipe
-
-        # Validate final recipe
-        recipe_obj = Recipe(**current_recipe)
-        self.state.data['recipe'] = recipe_obj.model_dump()
+        recipe = self.state.get_recipe()
+        recipe.instructions = instructions
+        self.state.set_recipe(recipe)
 
         # Emit final state update
         emit_copilotkit_state_update_event(
             tool_name="generate_instructions",
-            args=self.state.data['recipe']
+            args=self.state.recipe
         )
 
         print(f"DEBUG: *** EMITTED FINAL STATE UPDATE ***")
@@ -337,9 +341,7 @@ def kickoff():
     shared_state_flow = SharedStateFlow()
     result = shared_state_flow.kickoff({
         "state": {
-            "data": {
-                "recipe": None
-            }
+            "recipe": None
         },
         "messages": [
             {
