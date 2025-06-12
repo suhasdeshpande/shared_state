@@ -296,7 +296,7 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         # Emit state update
         emit_copilotkit_state_update_event(
             tool_name="generate_recipe_basics",
-            args=self.state.recipe
+            args=self.state
         )
 
         print(f"DEBUG: *** EMITTED BASICS STATE UPDATE ***")
