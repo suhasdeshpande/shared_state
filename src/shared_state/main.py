@@ -4,17 +4,74 @@ load_dotenv(override=True)
 
 import json
 import logging
+from datetime import datetime
 from enum import Enum
 from typing import Optional, List, Any
-from crewai import LLM
+from collections import defaultdict
+
+from litellm import completion
 from crewai.flow import start
 from pydantic import BaseModel, Field
 from copilotkit.crewai import (
     CopilotKitFlow,
-    tool_calls_log,
     FlowInputState,
 )
 from crewai.flow import persist
+from crewai.utilities.events import crewai_event_bus
+
+# ==================== CUSTOM EVENTS WITH PROPER TIMESTAMPS ====================
+
+class OrderedStreamChunkEvent(BaseModel):
+    """Custom event that sets timestamp at emission time"""
+    type: str = "ordered_stream_chunk"
+    timestamp: datetime = Field(default_factory=datetime.now)
+    sequence: int = 0
+    chunk: str = ""
+    context: Optional[str] = None  # "generating_recipe", "thinking", etc.
+    tool_call: Optional[dict] = None
+
+class OrderedToolCallEvent(BaseModel):
+    """Custom event for tool calls"""
+    type: str = "ordered_tool_call"
+    timestamp: datetime = Field(default_factory=datetime.now)
+    sequence: int = 0
+    tool_name: str
+    status: str  # "started" or "completed"
+    context: str = ""
+    result: Optional[Any] = None
+
+# Global sequence counter for ordering
+_sequence_counter = 0
+
+def emit_ordered_event(event):
+    """Emit event with proper timestamp and sequence"""
+    global _sequence_counter
+
+    # Set timestamp at emission time, not creation time
+    event.timestamp = datetime.now()
+    event.sequence = _sequence_counter
+    _sequence_counter += 1
+
+    # Use existing CrewAI event bus
+    crewai_event_bus.emit(source="recipe_flow", event=event)
+
+# ==================== EVENT HANDLER FOR DEBUGGING ====================
+
+@crewai_event_bus.on(OrderedStreamChunkEvent)
+def handle_stream_chunk(source, event: OrderedStreamChunkEvent):
+    """Handle ordered stream chunk events"""
+    context_info = f" [{event.context}]" if event.context else ""
+    print(f"🔥 CHUNK #{event.sequence} ({event.timestamp.strftime('%H:%M:%S.%f')[:-3]}){context_info}: '{event.chunk}'")
+
+@crewai_event_bus.on(OrderedToolCallEvent)
+def handle_tool_call(source, event: OrderedToolCallEvent):
+    """Handle ordered tool call events"""
+    if event.status == "started":
+        print(f"🛠️ TOOL START #{event.sequence}: {event.tool_name} - {event.context}")
+    elif event.status == "completed":
+        print(f"✅ TOOL DONE #{event.sequence}: {event.tool_name} - {event.context}")
+
+# ==================== RECIPE MODELS ====================
 
 class SkillLevel(str, Enum):
     """
@@ -157,8 +214,9 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
     @start()
     def chat(self):
         """
-        Standard chat node.
+        Standard chat node with proper event ordering.
         """
+        print("DEBUG: ENTERED CHAT METHOD")
         print(f"DEBUG: Current recipe state: {self.state.recipe}")
         print(f"DEBUG: Current messages: {self.state.messages}")
 
@@ -170,29 +228,102 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         This is the current state of the recipe: ----\n {json.dumps(self.state.recipe, indent=2) if self.state.recipe else "No recipe created yet"}\n-----
         """
 
-        # Initialize CrewAI LLM with streaming enabled
-        llm = LLM(model="gpt-4o", stream=True)
-
         # Get message history using the base class method
         messages = self.get_message_history(system_prompt=system_prompt)
 
         try:
-            # Track tool calls
-            initial_tool_calls_count = len(tool_calls_log)
+            print("DEBUG: Starting litellm streaming call...")
+            final_response = ""
 
-            response_content = llm.call(
+            # Use litellm with streaming
+            response_stream = completion(
+                model="gpt-4o",
                 messages=messages,
                 tools=[GENERATE_RECIPE_TOOL],
-                available_functions={"generate_recipe": self.generate_recipe_handler}
+                parallel_tool_calls=False,
+                stream=True
             )
 
-            # Handle tool responses using the base class method
-            final_response = self.handle_tool_responses(
-                llm=llm,
-                response_text=response_content,
-                messages=messages,
-                tools_called_count_before_llm_call=initial_tool_calls_count
-            )
+            full_response = ""
+            tool_calls = []
+            accumulated_tool_args = defaultdict(lambda: {'function': {'name': None, 'arguments': ''}})
+            current_context = "thinking"  # Start with thinking context
+
+            # Process stream in order and emit events immediately
+            for chunk in response_stream:
+                if hasattr(chunk, 'choices') and chunk.choices:
+                    delta = chunk.choices[0].delta
+
+                    # Handle regular content
+                    if hasattr(delta, 'content') and delta.content:
+                        full_response += delta.content
+
+                        # Emit chunk event immediately with current context
+                        emit_ordered_event(OrderedStreamChunkEvent(
+                            chunk=delta.content,
+                            context=current_context
+                        ))
+
+                    # Handle tool calls
+                    if hasattr(delta, 'tool_calls') and delta.tool_calls:
+                        # Switch context to recipe generation
+                        if current_context != "generating_recipe":
+                            current_context = "generating_recipe"
+                            emit_ordered_event(OrderedToolCallEvent(
+                                tool_name="generate_recipe",
+                                status="started",
+                                context="Starting recipe generation"
+                            ))
+
+                        for tool_call in delta.tool_calls:
+                            index = tool_call.index
+                            current_tool = accumulated_tool_args[index]
+
+                            if hasattr(tool_call, 'id') and tool_call.id:
+                                current_tool['id'] = tool_call.id
+
+                            if hasattr(tool_call, 'function'):
+                                if hasattr(tool_call.function, 'name') and tool_call.function.name:
+                                    current_tool['function']['name'] = tool_call.function.name
+
+                                if hasattr(tool_call.function, 'arguments') and tool_call.function.arguments:
+                                    current_tool['function']['arguments'] += tool_call.function.arguments
+
+                                    # Emit tool call chunk event immediately
+                                    emit_ordered_event(OrderedStreamChunkEvent(
+                                        chunk=tool_call.function.arguments,
+                                        context="generating_recipe",
+                                        tool_call={
+                                            "name": current_tool['function']['name'],
+                                            "arguments_chunk": tool_call.function.arguments
+                                        }
+                                    ))
+
+            # Convert accumulated tool args to list
+            tool_calls = [tool_data for tool_data in accumulated_tool_args.values() if tool_data['function']['name']]
+
+            # Handle tool calls
+            if tool_calls:
+                for tool_call in tool_calls:
+                    if tool_call['function']['name'] == 'generate_recipe':
+                        try:
+                            args = json.loads(tool_call['function']['arguments'])
+                            print(f"DEBUG: Calling generate_recipe with args: {args}")
+                            result = self.generate_recipe_handler(args['recipe'])
+                            print(f"DEBUG: Tool result: {result}")
+
+                            # Emit tool completion event
+                            emit_ordered_event(OrderedToolCallEvent(
+                                tool_name="generate_recipe",
+                                status="completed",
+                                context="Recipe generation completed",
+                                result=result
+                            ))
+
+                        except Exception as e:
+                            print(f"DEBUG: Error in tool call: {e}")
+
+            final_response = full_response if full_response else "Recipe created successfully"
 
             # ---- Maintain conversation history ----
             # 1. Add the current user message(s) to conversation history
@@ -204,12 +335,10 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
             assistant_message = {"role": "assistant", "content": final_response}
             self.state.conversation_history.append(assistant_message)
 
-            return json.dumps({
-                "response": final_response,
-                "id": self.state.id
-            })
+            return final_response
 
         except Exception as e:
+            print(f"DEBUG: Exception occurred: {e}")
             return f"\n\nAn error occurred: {str(e)}\n\n"
 
     def generate_recipe_handler(self, recipe):
@@ -224,6 +353,10 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
 
 
 def kickoff():
+    print("🚀 Starting Recipe Flow with Ordered Events")
+    print("📋 Events will show in proper chronological order:")
+    print()
+
     shared_state_flow = SharedStateFlow()
     result = shared_state_flow.kickoff({
         "state": {
@@ -236,6 +369,8 @@ def kickoff():
             }
         ]
     })
+    print()
+    print("✨ Final Result:")
     print(result)
 
 def plot():
