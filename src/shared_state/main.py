@@ -18,22 +18,21 @@ from copilotkit.crewai import (
 )
 from crewai.flow import persist
 from crewai.utilities.events import crewai_event_bus
+from crewai.utilities.events.base_events import BaseEvent
 
 # ==================== CUSTOM EVENTS WITH PROPER TIMESTAMPS ====================
 
-class OrderedStreamChunkEvent(BaseModel):
+class OrderedStreamChunkEvent(BaseEvent):
     """Custom event that sets timestamp at emission time"""
     type: str = "ordered_stream_chunk"
-    timestamp: datetime = Field(default_factory=datetime.now)
     sequence: int = 0
     chunk: str = ""
     context: Optional[str] = None  # "generating_recipe", "thinking", etc.
     tool_call: Optional[dict] = None
 
-class OrderedToolCallEvent(BaseModel):
+class OrderedToolCallEvent(BaseEvent):
     """Custom event for tool calls"""
     type: str = "ordered_tool_call"
-    timestamp: datetime = Field(default_factory=datetime.now)
     sequence: int = 0
     tool_name: str
     status: str  # "started" or "completed"
