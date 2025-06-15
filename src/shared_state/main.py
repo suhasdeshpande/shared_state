@@ -4,98 +4,17 @@ load_dotenv(override=True)
 
 import json
 import logging
-from datetime import datetime
 from enum import Enum
 from typing import Optional, List
-from collections import defaultdict
-
-import threading
-
-from litellm import completion
-from crewai.flow import start
 from pydantic import BaseModel, Field
 from copilotkit.crewai import (
     CopilotKitFlow,
     FlowInputState,
 )
-from crewai.flow import persist
-from crewai.utilities.events import crewai_event_bus
-from crewai.utilities.events.base_events import BaseEvent
+from crewai.flow import start, persist
 
-# ==================== SIMPLE DEBOUNCED CHUNK EVENT ====================
-
-class DebouncedChunkEvent(BaseEvent):
-    """Simple debounced chunk event"""
-    type: str = "debounced_chunk"
-    chunk: str = ""
-    context: str = "thinking"
-    sequence: int = 0
-    timestamp: Optional[datetime] = None
-
-# ==================== SIMPLE DEBOUNCER ====================
-
-class SimpleDebouncer:
-    """Dead simple debouncer - accumulate chunks for 50ms then emit"""
-
-    def __init__(self, delay_ms=50):
-        self.delay = delay_ms / 1000.0  # Convert to seconds
-        self.accumulated = ""
-        self.context = "thinking"
-        self.timer = None
-        self.sequence = 0
-
-    def add_chunk(self, content: str, context: str = "thinking"):
-        """Add content and start/reset timer"""
-        self.accumulated += content
-        self.context = context
-
-        # Cancel existing timer
-        if self.timer:
-            self.timer.cancel()
-
-        # Start new timer
-        self.timer = threading.Timer(self.delay, self._emit)
-        self.timer.start()
-
-        # Also emit if we've accumulated a decent amount
-        if len(self.accumulated) >= 30:
-            self._emit_now()
-
-    def _emit_now(self):
-        """Emit immediately"""
-        if self.timer:
-            self.timer.cancel()
-        self._emit()
-
-    def _emit(self):
-        """Emit the accumulated content"""
-        if not self.accumulated:
-            return
-
-        event = DebouncedChunkEvent(
-            chunk=self.accumulated,
-            context=self.context
-        )
-        event.timestamp = datetime.now()
-        event.sequence = self.sequence
-        self.sequence += 1
-
-        crewai_event_bus.emit(source="recipe_flow", event=event)
-
-        # Reset
-        self.accumulated = ""
-        self.timer = None
-
-# Global debouncer
-debouncer = SimpleDebouncer(delay_ms=500)
-
-# ==================== EVENT HANDLER ====================
-
-@crewai_event_bus.on(DebouncedChunkEvent)
-def handle_debounced_chunk(source, event: DebouncedChunkEvent):
-    """Handle debounced chunk events"""
-    chunk_preview = event.chunk[:80] + "..." if len(event.chunk) > 80 else event.chunk
-    print(f"🔥 CHUNK #{event.sequence} [{event.context}]: '{chunk_preview}' (len: {len(event.chunk)})")
+# Import our clean abstraction
+from shared_state.copilotkit_streaming import copilotkit_stream_completion
 
 # ==================== RECIPE MODELS ====================
 
@@ -220,7 +139,7 @@ class AgentState(FlowInputState):
 class SharedStateFlow(CopilotKitFlow[AgentState]):
     @start()
     def chat(self):
-        """Standard chat with simple debounced chunks"""
+        """Clean chat with abstracted streaming and tool handling"""
 
         system_prompt = f"""
         You are a helpful assistant for creating recipes.
@@ -230,62 +149,28 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         This is the current state of the recipe: ----\n {json.dumps(self.state.recipe, indent=2) if self.state.recipe else "No recipe created yet"}\n-----
         """
 
+        print(f"🔥 SYSTEM PROMPT: {system_prompt}")
+
         messages = self.get_message_history(system_prompt=system_prompt)
 
         try:
-            response_stream = completion(
+            # Clean, simple streaming with automatic chunking and tool handling
+            response = copilotkit_stream_completion(
                 model="gpt-4o",
                 messages=messages,
-                tools=[GENERATE_RECIPE_TOOL],
-                parallel_tool_calls=False,
-                stream=True
+                tools=[GENERATE_RECIPE_TOOL]
             )
 
-            full_response = ""
-            tool_calls = []
-            accumulated_tool_args = defaultdict(lambda: {'function': {'name': None, 'arguments': ''}})
-            current_context = "thinking"
+            final_response = response.content
 
-            for chunk in response_stream:
-                if hasattr(chunk, 'choices') and chunk.choices:
-                    delta = chunk.choices[0].delta
-
-                    # Handle regular content
-                    if hasattr(delta, 'content') and delta.content:
-                        full_response += delta.content
-                        debouncer.add_chunk(delta.content, current_context)
-
-                    # Handle tool calls
-                    if hasattr(delta, 'tool_calls') and delta.tool_calls:
-                        current_context = "generating_recipe"
-
-                        for tool_call in delta.tool_calls:
-                            index = tool_call.index
-                            current_tool = accumulated_tool_args[index]
-
-                            if hasattr(tool_call, 'function'):
-                                if hasattr(tool_call.function, 'name') and tool_call.function.name:
-                                    current_tool['function']['name'] = tool_call.function.name
-
-                                if hasattr(tool_call.function, 'arguments') and tool_call.function.arguments:
-                                    current_tool['function']['arguments'] += tool_call.function.arguments
-                                    debouncer.add_chunk(tool_call.function.arguments, "generating_recipe")
-
-            # Flush any remaining content
-            debouncer._emit_now()
-
-            # Handle tool calls
-            tool_calls = [tool_data for tool_data in accumulated_tool_args.values() if tool_data['function']['name']]
-            if tool_calls:
-                for tool_call in tool_calls:
-                    if tool_call['function']['name'] == 'generate_recipe':
-                        try:
-                            args = json.loads(tool_call['function']['arguments'])
-                            result = self.generate_recipe_handler(args['recipe'])
-                        except Exception as e:
-                            print(f"Error in tool call: {e}")
-
-            final_response = full_response if full_response else "Recipe created successfully"
+            # Clean, simple tool call handling - exactly what you wanted!
+            for tool_call in response.tool_calls:
+                if tool_call['function']['name'] == 'generate_recipe':
+                    try:
+                        recipe_data = tool_call['function']['arguments']['recipe']
+                        final_response = self.generate_recipe_handler(recipe_data)
+                    except Exception as e:
+                        print(f"Error in tool call: {e}")
 
             # Maintain conversation history
             for msg in self.state.messages:
@@ -298,7 +183,6 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
             return final_response
 
         except Exception as e:
-            debouncer._emit_now()  # Flush on error
             return f"An error occurred: {str(e)}"
 
     def generate_recipe_handler(self, recipe):
@@ -307,8 +191,8 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         return "Recipe created successfully"
 
 def kickoff():
-    print("🚀 Starting Recipe Flow with Simple Debounced Chunks")
-    print("⏱️  500ms debounce - accumulate then emit quality chunks")
+    print("🚀 Starting Recipe Flow with Clean Abstracted Streaming")
+    print("⚡ Zero boilerplate - just focus on your flow logic")
     print()
 
     shared_state_flow = SharedStateFlow()
