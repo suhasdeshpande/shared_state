@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-import json
 from datetime import datetime
 from typing import Optional, List, Dict
 from crewai.utilities.events import crewai_event_bus
@@ -41,14 +40,3 @@ def copilotkit_predict_state(
     print(f"🔮 PREDICT STATE [{context}]: {len(predict_config)} states")
     for config in predict_config:
         print(f"   → {config['state_key']}: {config['tool']}({config['tool_argument']})")
-
-
-# ==================== EVENT HANDLER ====================
-@crewai_event_bus.on(CopilotKitPredictStateEvent)
-def handle_predict_state_event(source, event: CopilotKitPredictStateEvent):
-    """Default handler for predict state events"""
-    print(f"🎯 PREDICT STATE EVENT [{event.context}]:")
-    print(f"   Source: {source}")
-    print(f"   Config: {json.dumps(event.predict_config, indent=2)}")
-
-
