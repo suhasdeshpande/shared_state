@@ -155,7 +155,7 @@ class LLMStreamHandler:
                                     current_tool['function']['arguments'] += tool_call.function.arguments
                                     self.debouncer.add_chunk(
                                         tool_call.function.arguments,
-                                        f"tool_{current_tool['function']['name']}"
+                                        current_tool['function']['name']
                                     )
 
             # Flush any remaining content

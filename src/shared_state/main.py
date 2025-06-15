@@ -199,16 +199,11 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         return "Recipe created successfully"
 
 def kickoff():
-    print("🚀 Starting Recipe Flow with Clean Abstracted Streaming")
-    print("⚡ Zero boilerplate - just focus on your flow logic")
-    print()
-
     shared_state_flow = SharedStateFlow()
     result = shared_state_flow.kickoff({
         "state": {"recipe": None},
         "messages": [{"role": "user", "content": "Create a simple pasta recipe for beginners"}]
     })
-
     print("\n✨ Final Result:")
     print(result)
 
