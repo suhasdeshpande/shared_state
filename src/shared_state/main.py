@@ -15,6 +15,7 @@ from crewai.flow import start, persist
 
 # Import our clean abstraction
 from shared_state.copilotkit_streaming import copilotkit_stream_completion
+from shared_state.copilotkit_predict_state import copilotkit_predict_state
 
 # ==================== RECIPE MODELS ====================
 
@@ -154,6 +155,13 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         messages = self.get_message_history(system_prompt=system_prompt)
 
         try:
+            copilotkit_predict_state([
+                {
+                    "state_key": "recipe",
+                    "tool": "generate_recipe",
+                    "tool_argument": "recipe"
+                }
+            ])
             # Clean, simple streaming with automatic chunking and tool handling
             response = copilotkit_stream_completion(
                 model="gpt-4o",
