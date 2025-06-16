@@ -10,12 +10,10 @@ from pydantic import BaseModel, Field
 from copilotkit.crewai import (
     CopilotKitFlow,
     FlowInputState,
+    copilotkit_stream_completion,
+    emit_copilotkit_predict_state,
 )
 from crewai.flow import start, persist
-
-# Import our clean abstraction
-from shared_state.copilotkit_streaming import copilotkit_stream_completion
-from shared_state.copilotkit_predict_state import copilotkit_predict_state
 
 # ==================== RECIPE MODELS ====================
 
@@ -150,12 +148,10 @@ class SharedStateFlow(CopilotKitFlow[AgentState]):
         This is the current state of the recipe: ----\n {json.dumps(self.state.recipe, indent=2) if self.state.recipe else "No recipe created yet"}\n-----
         """
 
-        print(f"🔥 SYSTEM PROMPT: {system_prompt}")
-
         messages = self.get_message_history(system_prompt=system_prompt)
 
         try:
-            copilotkit_predict_state([
+            emit_copilotkit_predict_state([
                 {
                     "state_key": "recipe",
                     "tool": "generate_recipe",
