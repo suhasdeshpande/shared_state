@@ -6,8 +6,8 @@ authors = [{ name = "Suhas Deshpande", email = "suhas@copilotkit.ai" }]
 requires-python = ">=3.10,<3.13"
 dependencies = [
     "crewai[tools]>=0.118.0,<1.0.0",
-    "copilotkit==0.1.50a2",
     "litellm>=1.68.0",
+    "ag-ui-crewai"
 ]
 
 [project.scripts]
